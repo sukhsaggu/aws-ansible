@@ -27,4 +27,4 @@ This playbook will:
 * `<aws_named_profile>` ***value*** =  name of the 'aws named profile'. e.g user-01@awsaccount. This profile should be stored in ~/.aws/credentials
 * `<ansible_ssh_private_key_file>` ***value*** = path to private key. e.g ~/aws_keys/my_key.pem
 
-    ansible-playbook launch_aws_ec2_rhel.yml --extra-vars '{"aws_named_profile":"***value***","ansible_ssh_private_key_file":"***value***" }'
+>ansible-playbook launch_aws_ec2_rhel.yml --extra-vars '{"aws_named_profile":"***value***","ansible_ssh_private_key_file":"***value***" }'
