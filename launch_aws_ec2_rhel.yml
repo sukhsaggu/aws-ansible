@@ -1,0 +1,65 @@
+---
+- hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: start up an ec2 instance
+      ec2:
+        profile: "{{ aws_named_profile }}"
+        region: ca-central-1
+        key_name: aws-projects-devops
+        instance_type: t2.micro
+        image: ami-0b85d4ff00de6a225
+        wait: yes
+        count: 1
+        groups: remote-access-anywhere
+      register: ec2
+
+    - name: display the new instance details
+      debug:
+        msg:
+          - "{{ ec2.instances[0] }}"
+
+    - name: add new instance to a new host group
+      add_host:
+        hostname: "{{ item.public_dns_name }}"
+        groupname: launched
+      loop: "{{ ec2.instances }}"
+
+    - name: wait for SSH to come up #set host_key_checking = False in ansible.cfg. for persistent servers should add to known hosts
+      delegate_to: "{{ item.public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+      loop: "{{ ec2.instances }}"
+      vars:
+        ansible_user: ec2-user
+        #ansible_ssh_private_key_file:
+
+- hosts: launched
+  gather_facts: true
+  vars:
+    ansible_user: ec2-user
+    #ansible_ssh_private_key_file:
+  tasks:
+    - name: connect to the new instance
+      setup:
+
+    - name: print the new instance facts
+      debug:
+        msg: "{{ ansible_facts }}"
+
+    - name: reboot
+      reboot:
+        msg: rebooted by ansible
+      become: yes #need to become otherwise this task will fail
+
+- name: Terminate instances
+  hosts: localhost
+  tasks:
+    - name: Terminate instances that were previously launched
+      ec2:
+        profile: "{{ aws_named_profile }}"
+        region: ca-central-1
+        state: "absent"
+        instance_ids: "{{ ec2.instance_ids }}"
