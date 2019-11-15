@@ -1,0 +1,92 @@
+---
+- name: create a new instance and test connectivity
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  tasks:
+    - name: start up an ec2 instance
+      ec2:
+        profile: "{{ aws_named_profile }}"
+        region: ca-central-1
+        key_name: aws-projects-devops
+        instance_type: t2.micro
+        image: ami-0c7609710809ad56e
+        wait: yes
+        count: 1
+        groups: remote-access-anywhere
+        user_data: <powershell>set-NetFirewallrule winrm-http-in-tcp-public -RemoteAddress any</powershell> #adjust the windows firewall to allow connections from anywhere
+      register: ec2
+
+    - name: print new instance details
+      debug:
+        msg:
+          - "{{ ec2.instances[0] }}"
+          - "{{ ec2.instances[0].id }}"
+
+    - name: get the Administrator password
+      ec2_win_password:
+        profile: "{{ aws_named_profile }}"
+        instance_id: "{{ ec2.instances[0].id }}"
+        region: ca-central-1
+        key_file: "{{ key_file_path }}"
+        wait: yes
+        wait_timeout: 45
+      retries: 3
+      delay: 60
+      register: win_pass
+      until: win_pass is not failed
+
+    - name: wait for winrm to come up
+      delegate_to: "{{ item.public_dns_name }}"
+      wait_for_connection:
+        delay: 60
+        timeout: 320
+      loop: "{{ ec2.instances }}"
+      vars:
+        ansible_user: administrator
+        ansible_password: "{{ win_pass.win_password }}"
+        ansible_connection: winrm
+        ansible_winrm_transport: ntlm
+        ansible_winrm_port: 5985
+
+    - name: add new instance to host group
+      add_host:
+        hostname: "{{ item.public_dns_name }}"
+        groupname: launched
+        ansible_user: administrator
+        ansible_password: "{{ win_pass.win_password }}"
+      loop: "{{ ec2.instances }}"
+
+- name: run some tasks on the new instance
+  hosts: launched
+  gather_facts: false
+  vars:
+    ansible_connection: winrm
+    ansible_winrm_transport: ntlm
+    ansible_winrm_port: 5985
+  tasks:
+    - name: connect to the new instance
+      setup:
+
+    - name: print the new instance facts
+      debug:
+        msg: "{{ ansible_facts }}"
+
+    - name: reboot
+      win_reboot:
+        pre_reboot_delay: 2
+        post_reboot_delay: 0
+        test_command: whoami
+        reboot_timeout: 600
+        msg: Reboot initiated by Ansible
+        connect_timeout: 5
+
+- name: terminate instances
+  hosts: localhost
+  tasks:
+    - name: terminate instances that were previously launched
+      ec2:
+        profile: "{{ aws_named_profile }}"
+        region: ca-central-1
+        state: "absent"
+        instance_ids: "{{ ec2.instance_ids }}"
