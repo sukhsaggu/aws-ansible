@@ -1,5 +1,6 @@
 ---
-- hosts: localhost
+- name: create a new instance and test connectivity
+  hosts: localhost
   gather_facts: false
   connection: local
   tasks:
@@ -36,7 +37,8 @@
         ansible_user: ec2-user
         #ansible_ssh_private_key_file:
 
-- hosts: launched
+- name: run some tasks on the new instance
+  hosts: launched
   gather_facts: true
   vars:
     ansible_user: ec2-user
@@ -54,10 +56,10 @@
         msg: rebooted by ansible
       become: yes #need to become otherwise this task will fail
 
-- name: Terminate instances
+- name: terminate instances
   hosts: localhost
   tasks:
-    - name: Terminate instances that were previously launched
+    - name: terminate instances that were previously launched
       ec2:
         profile: "{{ aws_named_profile }}"
         region: ca-central-1
